@@ -40,8 +40,7 @@
     .btn-green{background:var(--ok);color:#000;box-shadow:0 6px 18px rgba(78,203,113,.35);}
 
     /* ── layout ── */
-    .shell{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) 440px;gap:14px;align-items:start;}
-    @media(max-width:920px){.shell{grid-template-columns:1fr;}}
+    .shell{max-width:1200px;margin:0 auto;}
 
     /* ── card ── */
     .card{background:linear-gradient(145deg,#131320,#07070f);border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.7);}
@@ -107,6 +106,14 @@
 
     .hint{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;}
     .row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+    .admin-view{display:block;}
+    .admin-view.hidden{display:none;}
+    .editor-card{max-width:760px;margin:0 auto;}
+    .editor-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+    .editor-head .card-title{margin-bottom:0;}
+    .edit-btn{border:1px solid var(--accent-strong);border-radius:8px;background:var(--accent-soft);color:var(--accent);cursor:pointer;font-size:12px;font-weight:700;padding:6px 10px;white-space:nowrap;}
+    .collapsible-toggle{width:100%;border:1px solid var(--accent-strong);border-radius:8px;background:rgba(212,162,88,.08);color:var(--accent);cursor:pointer;padding:8px 10px;margin-top:8px;text-align:right;font-size:12px;font-weight:700;}
+    .image-controls.collapsed{display:none;}
     .category-notes{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
     .category-notes-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
     .category-notes-head .card-title{margin-bottom:0;}
@@ -163,13 +170,14 @@
   <div class="shell">
 
     <!-- LEFT: item list -->
+    <div class="admin-view" id="adminListView">
     <div class="card">
       <div class="card-title">الأصناف</div>
       <div class="sec-tabs" id="secTabs"></div>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>#</th><th>ترتيب</th><th>صورة</th><th class="name-cell">الاسم</th><th>الوصف</th><th>السعر</th></tr>
+            <tr><th>#</th><th>ترتيب</th><th>صورة</th><th class="name-cell">الاسم</th><th>الوصف</th><th>السعر</th><th>تعديل</th></tr>
           </thead>
           <tbody id="itemsTbody"></tbody>
         </table>
@@ -204,10 +212,15 @@
       </div>
       <div class="statusbar" id="statusBox"></div>
     </div>
+    </div>
 
     <!-- RIGHT: edit form -->
-    <div class="card">
-      <div class="card-title" id="formTitle">تعديل صنف</div>
+    <div class="admin-view hidden" id="itemEditorView">
+    <div class="card editor-card">
+      <div class="editor-head">
+        <div class="card-title" id="formTitle">تعديل صنف</div>
+        <button type="button" class="btn btn-outline" id="backToListBtn">← الرجوع للقائمة</button>
+      </div>
       <div class="hint">التغييرات تُحفظ في الذاكرة أولاً. اضغط <strong>حفظ التغييرات</strong> للكتابة على Supabase.</div>
 
       <div class="form-grid">
@@ -254,7 +267,8 @@
             </button>
           </div>
           <input type="file" id="fImageFile" accept="image/*" style="display:none;" />
-          <div class="image-controls">
+          <button type="button" class="collapsible-toggle" id="toggleImageSettingsBtn">▼ تعديل إعدادات الصورة</button>
+          <div class="image-controls collapsed" id="imageSettingsPanel">
             <div class="field span2">
               <label>طريقة ملء إطار الصورة</label>
               <select id="fImageFit">
@@ -292,10 +306,11 @@
       </div>
 
       <div class="row-actions">
-        <button class="btn btn-gold"    id="applyItemBtn">✓ تطبيق</button>
-        <button class="btn btn-outline" id="clearFormBtn">✕ مسح</button>
+        <button class="btn btn-gold"    id="applyItemBtn">✓ حفظ الصنف والرجوع</button>
+        <button class="btn btn-outline" id="clearFormBtn">إلغاء والرجوع</button>
       </div>
       <div class="statusbar" id="formStatus"></div>
+    </div>
     </div>
 
   </div>
@@ -373,11 +388,20 @@ const catNoteEn  = document.getElementById('catNoteEn');
 const catNoteHe  = document.getElementById('catNoteHe');
 const categoryNotesBox = document.getElementById('categoryNotesBox');
 const toggleCategoryNotesBtn = document.getElementById('toggleCategoryNotesBtn');
+const adminListView = document.getElementById('adminListView');
+const itemEditorView = document.getElementById('itemEditorView');
+const toggleImageSettingsBtn = document.getElementById('toggleImageSettingsBtn');
+const imageSettingsPanel = document.getElementById('imageSettingsPanel');
 
 // ── Auth ────────────────────────────────────────────────────────
 const ADMIN_USERNAME_EMAILS = {
   admin: 'ahmed.hosh007@gmail.com'
 };
+
+function resetLoginGate() {
+  document.getElementById('loginBtn').disabled = false;
+  document.getElementById('gateErr').textContent = '';
+}
 
 async function login() {
   const username = document.getElementById('gateUsername').value.trim().toLowerCase();
@@ -418,7 +442,7 @@ async function logout() {
   document.getElementById('app').style.display  = 'none';
   document.getElementById('gateUsername').value = '';
   document.getElementById('gatePassword').value = '';
-  document.getElementById('gateErr').textContent = '';
+  resetLoginGate();
 }
 
 // Auto-restore session if already logged in
@@ -523,6 +547,31 @@ function getImageSettings(item = {}) {
 function imageStyleAttr(item = {}) {
   const settings = getImageSettings(item);
   return `object-fit:${settings.fit};object-position:${settings.posX}% ${settings.posY}%;transform:scale(${settings.zoom / 100});transform-origin:${settings.posX}% ${settings.posY}%;`;
+}
+
+function isEditorOpen() {
+  return !itemEditorView.classList.contains('hidden');
+}
+
+function showListView() {
+  itemEditorView.classList.add('hidden');
+  adminListView.classList.remove('hidden');
+  renderTable();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function showEditorView() {
+  adminListView.classList.add('hidden');
+  itemEditorView.classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function toggleImageSettings(forceOpen) {
+  const shouldOpen = typeof forceOpen === 'boolean'
+    ? forceOpen
+    : imageSettingsPanel.classList.contains('collapsed');
+  imageSettingsPanel.classList.toggle('collapsed', !shouldOpen);
+  toggleImageSettingsBtn.textContent = (shouldOpen ? '▲' : '▼') + ' تعديل إعدادات الصورة';
 }
 
 // ── Render ───────────────────────────────────────────────────────
@@ -659,6 +708,17 @@ function renderTable() {
     const priceTd = document.createElement('td');
     priceTd.textContent = priceText;
 
+    const editTd = document.createElement('td');
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'edit-btn';
+    editBtn.textContent = 'تعديل';
+    editBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      openEditorForItem(item.id);
+    });
+    editTd.appendChild(editBtn);
+
     tr.addEventListener('dragstart', e => {
       draggedItemId = item.id;
       tr.classList.add('dragging');
@@ -685,7 +745,7 @@ function renderTable() {
       moveItemInActiveSection(sourceId, i);
     });
 
-    tr.append(indexTd, orderTd, imageTd, nameTd, descTd, priceTd);
+    tr.append(indexTd, orderTd, imageTd, nameTd, descTd, priceTd, editTd);
     tr.addEventListener('click', () => selectItem(item.id));
     itemsTbody.appendChild(tr);
   });
@@ -731,6 +791,12 @@ function selectItem(id) {
   setFormStatus('تم تحميل الصنف للتعديل.', 'ok');
 }
 
+function openEditorForItem(id) {
+  selectItem(id);
+  toggleImageSettings(false);
+  showEditorView();
+}
+
 function findItem(id) {
   for (const sec of data.sections)
     for (const item of sec.items)
@@ -751,6 +817,7 @@ function clearForm() {
   imgPreviewFrame.style.display = 'none';
   renderTable();
   setFormStatus('', '');
+  showListView();
 }
 
 function updatePreview() {
@@ -794,7 +861,6 @@ function updateImageControlLabels() {
 
 function syncImageControls() {
   updatePreview();
-  syncSelectedItemFromForm();
 }
 
 let previewDragStart = null;
@@ -849,12 +915,12 @@ document.getElementById('fImageFile').addEventListener('change', async function 
 
   try {
     const pendingKey = getPendingUploadKey();
-    const url = await uploadImageToSupabase(file);
+    const uploadResult = await uploadImageToSupabase(file);
+    const url = uploadResult.url;
     await replacePendingUpload(pendingKey, url);
     fImage.value = url;
     updatePreview();
-    syncSelectedItemFromForm();
-    setFormStatus('✓ تم رفع الصورة بنجاح.', 'ok');
+    setFormStatus(`✓ تم رفع الصورة وضغطها بنجاح (${formatBytes(file.size)} → ${formatBytes(uploadResult.size)}).`, 'ok');
   } catch (err) {
     console.error('Image upload error:', err);
     setFormStatus('✗ فشل رفع الصورة: ' + err.message, 'bad');
@@ -864,33 +930,104 @@ document.getElementById('fImageFile').addEventListener('change', async function 
 });
 
 async function uploadImageToSupabase(file) {
-  const maxSize = 2 * 1024 * 1024;
+  const maxSourceSize = 12 * 1024 * 1024;
   const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
 
   if (!allowedTypes.includes(file.type)) {
     throw new Error('نوع الصورة غير مدعوم. استخدم JPG أو PNG أو WebP.');
   }
 
-  if (file.size > maxSize) {
-    throw new Error('الصورة كبيرة جداً. الحد الأقصى 2MB.');
+  if (file.size > maxSourceSize) {
+    throw new Error('الصورة كبيرة جداً. الحد الأقصى قبل الضغط 12MB.');
   }
 
-  const ext      = file.name.split('.').pop().toLowerCase();
-  const fileName = Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.' + ext;
+  const compressed = await compressImageForUpload(file);
+  const fileName = Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.' + compressed.ext;
 
   const { error: uploadError } = await db.storage
     .from('images')
-    .upload(fileName, file, { cacheControl: '3600', upsert: false });
+    .upload(fileName, compressed.blob, { cacheControl: '3600', contentType: compressed.type, upsert: false });
 
   if (uploadError) throw uploadError;
 
   const { data: { publicUrl } } = db.storage.from('images').getPublicUrl(fileName);
-  return publicUrl;
+  return { url: publicUrl, size: compressed.blob.size };
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+async function compressImageForUpload(file) {
+  const maxDimension = 1600;
+  const minQuality = 0.62;
+  const targetSize = 650 * 1024;
+  const source = await loadImageSource(file);
+  const scale = Math.min(1, maxDimension / Math.max(source.width, source.height));
+  const width = Math.max(1, Math.round(source.width * scale));
+  const height = Math.max(1, Math.round(source.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { alpha: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, width, height);
+  source.close?.();
+
+  let quality = 0.82;
+  let blob = await canvasToBlob(canvas, 'image/webp', quality);
+  while (blob.size > targetSize && quality > minQuality) {
+    quality = Math.max(minQuality, quality - 0.08);
+    blob = await canvasToBlob(canvas, 'image/webp', quality);
+  }
+
+  if (file.size <= blob.size) {
+    return {
+      blob: file,
+      type: file.type,
+      ext: file.type === 'image/png' ? 'png' : (file.type === 'image/webp' ? 'webp' : 'jpg')
+    };
+  }
+
+  return { blob, type: blob.type || 'image/webp', ext: 'webp' };
+}
+
+async function loadImageSource(file) {
+  if ('createImageBitmap' in window) return createImageBitmap(file);
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('تعذر قراءة الصورة.'));
+    };
+    img.src = url;
+  });
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (!blob) reject(new Error('تعذر ضغط الصورة في هذا المتصفح.'));
+      else resolve(blob);
+    }, type, quality);
+  });
 }
 
 // ── Apply (save to local state) ───────────────────────────────────
 function applyItem() {
-  return applyItemToState(true);
+  const applied = applyItemToState(true);
+  if (applied) showListView();
+  return applied;
 }
 
 function applyItemToState(showMessages = true) {
@@ -955,27 +1092,6 @@ function applyItemToState(showMessages = true) {
   renderAll();
   if (showMessages) setStatus('تغييرات غير محفوظة — اضغط 💾 حفظ التغييرات', 'warn');
   return true;
-}
-
-function syncSelectedItemFromForm() {
-  if (!selectedItemId || isNew) return;
-
-  const item = findItem(selectedItemId);
-  if (!item) return;
-
-  item.ar = fAr.value.trim();
-  item.en = fEn.value.trim();
-  item.he = fHe.value.trim();
-  item.descAr = fDescAr.value.trim();
-  item.descEn = fDescEn.value.trim();
-  item.descHe = fDescHe.value.trim();
-  item.price = fPrice.value.trim() !== '' ? Number(fPrice.value.trim()) : null;
-  item.priceLabel = fPrice.value.trim() === '' ? 'حسب الوزن' : '';
-  item.image = fImage.value.trim();
-  Object.assign(item, readImageControls());
-
-  renderTable();
-  setStatus('تغييرات غير محفوظة — اضغط 💾 حفظ التغييرات', 'warn');
 }
 
 // ── Delete from local state ───────────────────────────────────────
@@ -1190,8 +1306,9 @@ async function cleanupUnusedImages() {
 
 // ── Save to Supabase ──────────────────────────────────────────────
 async function saveToSupabase() {
-  if ((selectedItemId || isNew) && fAr.value.trim()) {
-    const applied = applyItemToState(false);
+  const shouldApplyOpenEditor = isEditorOpen() && (selectedItemId || isNew);
+  if (shouldApplyOpenEditor) {
+    const applied = applyItemToState(true);
     if (!applied) return;
   }
 
@@ -1275,6 +1392,7 @@ async function saveToSupabase() {
       ? `، صور محذوفة: ${imageDeletes}، فشل حذف صور: ${imageDeleteFailures}`
       : `، صور محذوفة: ${imageDeletes}`;
     setStatus(`✓ تم الحفظ. تغييرات: ${totalChanges}، أقسام: ${categoryUpdates}، جديد: ${itemInserts}، تعديل: ${itemUpdates}، حذف: ${itemDeletes}${imageStatus}. عناصر النسخة: ${totalBackupItems}. النسخة: ${backupPath}`, imageDeleteFailures ? 'warn' : 'ok');
+    if (shouldApplyOpenEditor) showListView();
   } catch (err) {
     console.error('Save error:', err);
     setStatus('✗ فشل الحفظ: ' + err.message, 'bad');
@@ -1407,7 +1525,7 @@ function buildBackupMenuHtml() {
       const price = item.priceLabel || (item.price != null ? '₪' + Number(item.price).toLocaleString() : '—');
       const name = htmlEsc(textAr(item));
       const description = htmlEsc(descAr(item));
-      return `<article class="menu-item"><div class="item-main"><div class="item-name-row"><span class="item-name">${name}</span></div>${description ? `<p class="item-description">${description}</p>` : ''}${item.image ? `<div class="item-photo-frame"><img class="item-photo" src="${htmlEsc(item.image)}" alt="${name}" loading="lazy" style="${imageStyle(item)}" onerror="this.closest('.item-photo-frame').style.display='none'" /></div>` : ''}</div><div class="item-price">${htmlEsc(price)}</div></article>`;
+      return `<article class="menu-item"><div class="item-main"><div class="item-name-row"><span class="item-name">${name}</span></div>${description ? `<p class="item-description">${description}</p>` : ''}${item.image ? `<div class="item-photo-frame" role="button" tabindex="0" data-full-image="${htmlEsc(item.image)}" data-image-alt="${name}"><img class="item-photo" src="${htmlEsc(item.image)}" alt="${name}" loading="lazy" style="${imageStyle(item)}" onerror="this.closest('.item-photo-frame').style.display='none'" /></div>` : ''}</div><div class="item-price">${htmlEsc(price)}</div></article>`;
     }).join('');
 
     return `<section class="menu-section${sec.id === initialSectionId ? ' active-section' : ''}" id="sec-${htmlEsc(sec.id)}"><div class="section-header"><h2 class="section-title">${htmlEsc(textAr(sec.label))}<span class="dot">•</span></h2><div class="section-tag">${htmlEsc(sec.tag || '')}</div></div>${textAr(sec.note) ? `<p class="section-note">${htmlEsc(textAr(sec.note))}</p>` : ''}<div style="margin-top:22px"></div>${items}</section>`;
@@ -1460,8 +1578,12 @@ function buildBackupMenuHtml() {
     .item-name{font-size:15px;font-weight:600;}
     .item-description{font-size:12px;color:var(--text-muted);line-height:1.55;margin:3px 0 0;}
     .item-price{font-size:15px;font-weight:600;white-space:nowrap;text-align:left;align-self:center;}
-    .item-photo-frame{width:100%;max-width:220px;height:140px;border-radius:18px;margin-top:6px;overflow:hidden;border:1px solid var(--border-soft);background:#070712;}
+    .item-photo-frame{width:100%;max-width:220px;height:140px;border-radius:18px;margin-top:6px;overflow:hidden;border:1px solid var(--border-soft);background:#070712;cursor:pointer;padding:0;display:block;}
     .item-photo{width:100%;height:100%;display:block;}
+    .image-lightbox{position:fixed;inset:0;z-index:9998;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.82);}
+    .image-lightbox.open{display:flex;}
+    .lightbox-img{max-width:min(96vw,980px);max-height:88vh;border-radius:14px;border:1px solid rgba(255,255,255,.2);box-shadow:0 24px 80px rgba(0,0,0,.75);object-fit:contain;background:#05050a;}
+    .lightbox-close{position:fixed;top:16px;right:16px;width:38px;height:38px;border-radius:999px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.65);color:#fff;font-size:24px;line-height:1;cursor:pointer;}
     .loading-text{text-align:center;color:var(--text-muted);font-size:14px;padding:40px 0;}
     @media(max-width:600px){body{padding:10px;}.preload{padding-inline:14px;}.hero-logo{width:78px;top:14px;right:14px;}.menu-section{padding-inline:12px;}}
   </style>
@@ -1489,6 +1611,10 @@ function buildBackupMenuHtml() {
       <div class="meal-offers-title" id="mealOffersTitle">عرض الوجبات</div>
       <ul class="meal-offers-list" id="mealOffersList">${initialOffers}</ul>
     </div>
+  </div>
+  <div class="image-lightbox" id="imageLightbox" aria-hidden="true">
+    <button class="lightbox-close" id="lightboxClose" type="button" aria-label="Close image">×</button>
+    <img class="lightbox-img" id="lightboxImg" alt="" />
   </div>
   <script>
     const MENU_BACKUP = ${payload};
@@ -1547,6 +1673,25 @@ function buildBackupMenuHtml() {
       window.scrollTo({ top, behavior: 'smooth' });
     }
 
+    function openImageLightbox(src, alt) {
+      const lightbox = document.getElementById('imageLightbox');
+      const img = document.getElementById('lightboxImg');
+      img.src = src;
+      img.alt = alt || '';
+      lightbox.classList.add('open');
+      lightbox.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeImageLightbox() {
+      const lightbox = document.getElementById('imageLightbox');
+      const img = document.getElementById('lightboxImg');
+      lightbox.classList.remove('open');
+      lightbox.setAttribute('aria-hidden', 'true');
+      img.src = '';
+      document.body.style.overflow = '';
+    }
+
     function render(lang) {
       try {
         currentLang = lang;
@@ -1574,7 +1719,7 @@ function buildBackupMenuHtml() {
             const description = esc(descriptionByLang(item, lang));
             return '<article class="menu-item"><div class="item-main"><div class="item-name-row"><span class="item-name">' + name + '</span></div>' +
               (description ? '<p class="item-description">' + description + '</p>' : '') +
-              (item.image ? '<div class="item-photo-frame"><img class="item-photo" src="' + esc(item.image) + '" alt="' + name + '" loading="lazy" style="' + imageStyle(item) + '" onerror="this.closest(\\'.item-photo-frame\\').style.display=\\'none\\'" /></div>' : '') +
+              (item.image ? '<div class="item-photo-frame" role="button" tabindex="0" data-full-image="' + esc(item.image) + '" data-image-alt="' + name + '"><img class="item-photo" src="' + esc(item.image) + '" alt="' + name + '" loading="lazy" style="' + imageStyle(item) + '" onerror="this.closest(\\'.item-photo-frame\\').style.display=\\'none\\'" /></div>' : '') +
               '</div><div class="item-price">' + esc(price) + '</div></article>';
           }).join('');
 
@@ -1592,6 +1737,22 @@ function buildBackupMenuHtml() {
     }
 
     document.getElementById('goToMenuBtn').addEventListener('click', scrollToCategories);
+    document.getElementById('lightboxClose').addEventListener('click', closeImageLightbox);
+    document.getElementById('imageLightbox').addEventListener('click', e => {
+      if (e.target.id === 'imageLightbox') closeImageLightbox();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeImageLightbox();
+      const frame = e.target.closest?.('.item-photo-frame');
+      if (frame && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        openImageLightbox(frame.dataset.fullImage, frame.dataset.imageAlt);
+      }
+    });
+    document.getElementById('sectionsWrapper').addEventListener('click', e => {
+      const frame = e.target.closest('.item-photo-frame');
+      if (frame) openImageLightbox(frame.dataset.fullImage, frame.dataset.imageAlt);
+    });
     document.querySelectorAll('.lang-pill').forEach(btn => btn.addEventListener('click', () => render(btn.dataset.lang)));
     render('ar');
   <\/script>
@@ -1711,16 +1872,18 @@ document.getElementById('newItemBtn').addEventListener('click', () => {
   fSection.value = activeSectionId || data?.sections[0]?.id || '';
   setFormStatus('وضع إضافة — عبئ الحقول واضغط تطبيق.', 'ok');
   renderTable();
+  toggleImageSettings(false);
+  showEditorView();
 });
 
 document.getElementById('deleteItemBtn').addEventListener('click', deleteItem);
 document.getElementById('cleanupImagesBtn').addEventListener('click', cleanupUnusedImages);
 document.getElementById('applyItemBtn').addEventListener('click', applyItem);
 document.getElementById('clearFormBtn').addEventListener('click', clearForm);
+document.getElementById('backToListBtn').addEventListener('click', showListView);
 document.getElementById('saveOffersBtn').addEventListener('click', saveOffers);
 toggleCategoryNotesBtn.addEventListener('click', toggleCategoryNotes);
-[fAr, fEn, fHe, fDescAr, fDescEn, fDescHe, fPrice, fImage].forEach(field =>
-  field.addEventListener('input', syncSelectedItemFromForm));
+toggleImageSettingsBtn.addEventListener('click', () => toggleImageSettings());
 [fImageFit, fImageZoom, fImagePosX, fImagePosY].forEach(field =>
   field.addEventListener('input', syncImageControls));
 catNoteAr.addEventListener('input', updateActiveSectionNotes);
